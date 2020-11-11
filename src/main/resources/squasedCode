@@ -1,0 +1,273 @@
+import java.util.*
+import java.io.*
+import java.math.*
+import Player.*
+
+data class Action(var player: Player, val row: Int, val col: Int) {
+    override fun toString(): String {
+        return "$row $col"
+    }
+
+    override fun equals(other: Any?): Boolean {
+        return if (other is Action) {
+            col == other.col && row == other.row
+        } else {
+            false
+        }
+    }
+
+    override fun hashCode(): Int {
+        var result = row
+        result = 31 * result + col
+        return result
+    }
+}
+
+class InvalidAction(message: String?) : Exception(message) {
+    companion object {
+        private const val serialVersionUID = -8185589153224401564L
+    }
+}
+
+data class actionQuality(var simCnt: Int, var reward: Int)
+
+
+fun findOptimalAction(timeBoundMilis: Long, currentPlayer: Player, gameState: GameState): Action {
+    var lastStepDuration: Long = 0
+    var timeLeft = timeBoundMilis
+    var stepStartTime: Long
+
+    // shouldn't happen - findOptimalActions should not be run on terminal state
+    val actionStateMap: MutableMap<Action, actionQuality> = mutableMapOf()
+    val validActions = gameState.getValidActions(currentPlayer)
+    if (validActions.isEmpty()) return Action(Player.NONE, -1, -1)
+
+    while (timeLeft - lastStepDuration > 0) {
+        stepStartTime = System.currentTimeMillis()
+        // pick random action
+        val randomAction = validActions.random()
+        randomAction.player = currentPlayer
+
+        // simulate after random state
+        val winner = playRandomSim(gameState.clone(), randomAction)
+
+        // update statistics
+        val stateQuality = actionStateMap.getOrDefault(randomAction, actionQuality(0, 0))
+        stateQuality.simCnt++
+        stateQuality.reward += currentPlayer.index * winner.index // reward: win=+1 draw = 0 lose=-1
+        actionStateMap[randomAction] = stateQuality
+
+        // measure step size
+        lastStepDuration = System.currentTimeMillis() - stepStartTime
+        timeLeft -= lastStepDuration
+    }
+
+    // return best quality action i.e. one with highest average reward/sims
+    return actionStateMap.maxBy { (_, quality) ->
+        quality.reward.toFloat() / quality.simCnt.toFloat()
+    }!!.key
+}
+
+// return winner or EMPTY on draw
+private fun playRandomSim(mutableState: GameState, action: Action): Player {
+    val winner = mutableState.play(action)
+    val validActions = mutableState.getValidActions(action.player.nextPlayer())
+    return if (validActions.isEmpty())
+        winner
+    else playRandomSim(mutableState, validActions.random().apply { player = action.player.nextPlayer() })
+}
+
+interface GameState {
+
+    // returns empty collection if state is terminal
+    fun getValidActions(player: Player): List<Action>
+    @Throws(InvalidAction::class)
+    fun play(action: Action): Player
+    fun clone(): GameState
+}
+
+enum class Player {
+
+    O {
+
+        override val index: Int = -1
+        override fun nextPlayer(): Player {
+            return X
+        }
+    },  // means either no field on board
+
+    NONE {
+
+        override val index: Int = 0
+        override fun nextPlayer(): Player {
+            return NONE
+        }
+    },
+
+    X {
+
+        override val index: Int = 1
+        override fun nextPlayer(): Player {
+            return O
+        }
+    };
+    abstract val index: Int
+    abstract fun nextPlayer(): Player
+}
+
+import java.util.*
+import Player.*
+
+open class TttState : GameState {
+    private var grid = Array(3) { arrayOf(NONE, NONE, NONE) }
+    var winner: Player = NONE
+    var freeSpaces = 9
+
+    override fun getValidActions(player: Player): List<Action> {
+        val validActions: MutableList<Action> = ArrayList()
+        if (winner === NONE) {
+            for (x in 0..2) {
+                for (y in 0..2) {
+                    if (grid[x][y] === NONE) {
+                        validActions.add(Action(player, x, y))
+                    }
+                }
+            }
+        }
+        return validActions
+    }
+
+    @Throws(InvalidAction::class)
+    override fun play(action: Action): Player {
+        if (action.row < 0 || action.row >= 3
+            || action.col < 0 || action.col >= 3
+            || grid[action.row][action.col] !== NONE
+        ) {
+            throw InvalidAction("Invalid move!")
+        }
+
+
+        // update grid
+        grid[action.row][action.col] = action.player
+        --freeSpaces
+        winner = checkWinner()
+        return winner
+    }
+
+    override fun clone(): TttState {
+        val clonedState = TttState()
+        for (x in 0..2) for (y in 0..2) clonedState.grid[x][y] = grid[x][y]
+        clonedState.winner = winner
+        clonedState.freeSpaces = freeSpaces
+        return clonedState
+    }
+
+    private fun checkWinner(): Player {
+        for (i in 0..2) {
+            // check rows
+            if (grid[i][0] !== NONE && grid[i][0] === grid[i][1] && grid[i][0] === grid[i][2]) return grid[i][0]
+
+            // check cols
+            if (grid[0][i] !== NONE && grid[0][i] === grid[1][i] && grid[0][i] === grid[2][i]) return grid[0][i]
+        }
+
+        // check diags
+        if (grid[0][0] !== NONE && grid[0][0] === grid[1][1] && grid[0][0] === grid[2][2]) return grid[0][0]
+        return if (grid[2][0] !== NONE && grid[2][0] === grid[1][1] && grid[2][0] === grid[0][2]) grid[2][0] else NONE
+    }
+
+    override fun toString(): String {
+        val sb = StringBuilder();
+        for (x in 0..2) {
+            for (y in 0..2) {
+                sb.append(
+                    when (grid[x][y]) {
+                        NONE -> '_';
+                        O -> 'O';
+                        X -> 'X';
+                    }
+                );
+            }
+            sb.append('\n');
+        }
+        return sb.toString();
+    }
+}
+
+class UtttState : GameState {
+    private val grid = Array(3) { arrayOf(TttState(), TttState(), TttState()) }
+    protected var winner = Player.NONE
+    private var freeSpaces = 9
+
+    @Throws(InvalidAction::class)
+    override fun play(action: Action): Player {
+        if (action.row < 0 || action.row >= 9 || action.col < 0 || action.col >= 9) throw InvalidAction("Invalid move!")
+        val subgrid = grid[action.row / 3][action.col / 3]
+        var winner = subgrid.play(action)
+        if (winner !== Player.NONE || subgrid.freeSpaces == 0) { // winner or draw
+            --freeSpaces
+            winner = checkWinner()
+        }
+        return winner
+    }
+
+    override fun getValidActions(player: Player): List<Action> {
+        val validActions: MutableList<Action> = ArrayList()
+        if (winner === Player.NONE) {
+            for (x in 0..2) for (y in 0..2) validActions.addAll(grid[x][y].getValidActions(player))
+        }
+        return validActions
+    }
+
+    private fun checkWinner(): Player {
+        for (i in 0..2) {
+            // check rows
+            if (grid[i][0].winner !== Player.NONE && grid[i][0] === grid[i][1] && grid[i][0] === grid[i][2])
+                return grid[i][0].winner
+
+            // check cols
+            if (grid[0][i].winner !== Player.NONE && grid[0][i] === grid[1][i] && grid[0][i] === grid[2][i])
+                return grid[0][i].winner
+        }
+
+        // check diags
+        if (grid[0][0].winner !== Player.NONE && grid[0][0] === grid[1][1] && grid[0][0] === grid[2][2])
+            return grid[0][0].winner
+        if (grid[2][0].winner !== Player.NONE && grid[2][0] === grid[1][1] && grid[2][0] === grid[0][2])
+            return grid[2][0].winner
+        return Player.NONE
+    }
+
+    override fun clone(): UtttState {
+        val clonedState = UtttState()
+        for (x in 0..2) for (y in 0..2) clonedState.grid[x][y] = grid[x][y].clone()
+        clonedState.winner = winner
+        clonedState.freeSpaces = freeSpaces
+        return clonedState
+    }
+}
+
+/**
+ * Auto-generated code below aims at helping you parse
+ * the standard input according to the problem statement.
+ **/
+fun main(args : Array<String>) {
+    val input = Scanner(System.`in`)
+    val gameState = UtttState()
+
+    // game loop
+    while (true) {
+        val opponentRow = input.nextInt()
+        val opponentCol = input.nextInt()
+        val validActionCount = input.nextInt()
+        for (i in 0 until validActionCount) {
+            val row = input.nextInt()
+            val col = input.nextInt()
+        }
+        if(opponentRow != -1)
+            gameState.play(Action(X, opponentRow, opponentCol))
+        val action = findOptimalAction(1000, Player.O, gameState)
+        gameState.play(action)
+        println("${action.row} ${action.col}")
+    }
+}
