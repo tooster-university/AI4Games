@@ -9,16 +9,21 @@ typealias Chromosome = List<Gene>
 typealias Population = List<Chromosome>
 
 
-
 // mutates gene completely and randomly
 fun Gene.randomMutation() = Random.nextGene()
 
 fun Random.nextGene() = Action(Random.nextInt(-90, 91), Random.nextInt(0, 5))
-fun Random.nextChromosome(length: Int = 300) = List(length) { Random.nextGene() }
-fun Random.nextPopulation(size: Int = 100) = List(size) { Random.nextChromosome() }
+fun Random.nextChromosome(length: Int) = List(length) { Random.nextGene() }
+fun Random.nextPopulation(populationSize: Int, chromosomeLength: Int) =
+    List(populationSize) { Random.nextChromosome(chromosomeLength) }
 
 // randomly mutate single gene
 fun Gene.mutate(probability: Double = 0.05) = if (Random.nextDouble() <= probability) Random.nextGene() else this
+
+// averages neighboring genes - returns first + averaged pairwise from second
+fun Chromosome.smoothen() = this.subList(0, 1) + zipWithNext { g1, g2 ->
+    Gene((g1.rotation + g2.rotation) / 2, (g1.thrust + g2.thrust) / 2)
+}
 
 // mutates chromosome uniformly - each gene has given chance to mutate
 fun Chromosome.uniformMutate(probability: Double = 0.05) =
@@ -42,12 +47,12 @@ infix fun Chromosome.doubleCrossover(other: Chromosome): Pair<Chromosome, Chromo
 fun Chromosome.uniformCrossover(other: Chromosome, probability: Double = 0.5): Pair<Chromosome, Chromosome> {
     assert(this.size == other.size)
     return this.zip(other).fold(mutableListOf<Gene>() to mutableListOf<Gene>(),
-        { (c1, c2), (g1, g2) ->
-            return if (Random.nextDouble() <= probability)
-                (c1 + g1) to (c2 + g2)
-            else
-                (c1 + g2) to (c2 + g1)
-        })
+                                { (c1, c2), (g1, g2) ->
+                                    return if (Random.nextDouble() <= probability)
+                                        (c1 + g1) to (c2 + g2)
+                                    else
+                                        (c1 + g2) to (c2 + g1)
+                                })
 }
 
 // returns fitness of this chromosome by simulating it's run.
@@ -57,88 +62,88 @@ fun Chromosome.uniformCrossover(other: Chromosome, probability: Double = 0.5): P
 //   3. landing speed - as norm of velocity vector
 //
 
-// evaluates a chromosome with simulation. All landing parameters are stored in engine until reset
-// offset is used to allow evolution in the middle of simulation
-fun Chromosome.simulate(geneOffset: Int) {
-    engine.restart()
-    // offset chromosome
-    val geneIterator = this.subList(geneOffset, size).iterator()
-    var lastAction = Action(0, 0)
+fun Chromosome.evaluate(): EngineParams = engine.simulateFlight(this)
 
-    while (engine.landing) {
-        if (geneIterator.hasNext())
-            lastAction = geneIterator.next()
-        engine.moveAndCheckCollided(lastAction)
+typealias PopulationEvolver = (Population) -> Population
+typealias FitnessFunction = EngineParams.() -> Double
+
+/** solver using rolling horizon tactic. PopulationMutator
+ * @param evolve    Function evolving the population. Returns sorted chromosomes with fitness.
+ *                  if population passed to evolver is empty, then it should create starting population
+ */
+fun rollingHorizonSolver(evolve: PopulationEvolver, fitness: FitnessFunction) {
+    var horizon = 0
+    var population = evolve(emptyList())
+    var rollingChromosome = listOf<Gene>() // resulting chromosome aka series of taken actions
+    var populationNr = 0 // ordinal of current population
+
+    while (true) {
+        val solverStart = System.currentTimeMillis() // when solver started
+
+        // evolve population as much as possible in given timeframe
+        while (System.currentTimeMillis() - solverStart < 995) { // FIXME: fit as much based on extrapolated time
+            // create ranking as 3 column
+            val ranking = population.map {
+                val ev = it.evaluate()
+                val fit = ev.fitness()
+                Triple(it, ev, fit)
+            }.sortedBy { it.third }
+
+            image.addPath(ranking[0].second.path, "1", "red")
+            ranking.subList(1, ranking.size).forEach { image.addPath(it.second.path, "1", "lime") }
+            image.renderPicture(populationNr)
+            newImage()
+
+            population = evolve(ranking.map { it.first })
+            ++populationNr
+
+        }
+        val best = population[0]
+
+        ++horizon
+
+        println("${best[0]}") // output best action from chromosome
+        rollingChromosome = rollingChromosome + best[0] // append new gene to rolling chromosome
+        population.map { it.subList(1, it.size) } // remove first genes
+
+        if (!local)
+            engine.calibrate() // read new input
+        else {
+            val p = engine.params
+            if (engine.moveAndCheckCollided(best[0], p)) {
+                System.err.println("OK? ${engine.params.acceptableLanding()}\n${engine.params}")
+                return
+            }
+            engine.params = p
+        }
     }
 }
-
-fun Population.rank(fitness: (chromosome: Chromosome) -> Double): Population =
-    this.sortedBy { chromosome: Chromosome ->
-        chromosome.simulate(stepsPassed)
-        fitness(chromosome)
-    }
-
-// how many steps till start passed
-var stepsPassed = 0
-
-// fitness method 1: polynomial from distance to landing site, fuel left and landing velocity
-fun polyFitness(chromosome: Chromosome): Double =
-    0 +
-            1.0 * abs(engine.crashMilestone - engine.flatMilestone).pow(3) -
-            1.0 * engine.fuel.toDouble().pow(2) + // make fuel more
-            1.0 * engine.velocity.norm() +
-            1.0 * abs(engine.yaw)
-
-// less is better
-fun linFit(chromosome: Chromosome): Double =
-    0 +
-            1000 * abs(engine.crashMilestone - engine.flatMilestone) - // closer = better
-            100 * engine.fuel.toDouble() + // more fuel = better
-            10 * engine.velocity.norm() + // smaller relative velocity = better
-            1 * abs(engine.yaw) // smaller angle = better
-
-fun crashFit(chromosome: Chromosome): Double = abs(engine.crashMilestone - engine.flatMilestone)
 
 // mu+lambda evolution - no crossover, only mutations
 // mu: how many best chromosomes to mutate
 // lambda: how many worst to replace with mu
 // here I don't use gaussian mutation but uniform mutation
-fun muLambdaSolver(fitFunction: (Chromosome) -> Double) {
-    val (mu, lambda) = 20 to 5
-
-    // rolling horizon population adjustment
-
-    var population = Random.nextPopulation(mu + lambda)
-    var populationNumber = 0
-    var bestSoFar = population[0]
-
-    while (true) {
-
-        val solverStart = System.currentTimeMillis()
-        // 95ms to evolve as much populations as possible
-        while (System.currentTimeMillis() - solverStart < 995) { // 995 miliseconds to log populations
-            ++populationNumber
-            val ranking = population.rank(fitFunction)
-            // update visualization
-            ranking.visualize(populationNumber)
-
-            population = ranking.subList(0, mu) + ranking.subList(mu, mu + lambda).map {
-                it.subList(0, stepsPassed) + it.subList(stepsPassed, it.size).uniformMutate(0.1)  // mutate leftover genes
-            }
-        }
-
-        // print next move of the best chromosome
-        val best = population.first()
-        println(best[min(best.size - 1, stepsPassed)]) // print best move
-        ++stepsPassed
+// this is not a proper mu, lambda - it just mutates worst lambda solutions keeping the best
+fun muLambdaEvolver(mu: Int, lambda: Int): PopulationEvolver = { ranking ->
+    val chromosomeLength = 200
+    if (ranking.isEmpty()) {
+        Random.nextPopulation(mu + lambda, chromosomeLength)
+    } else {
+        // mutate leftover genes
+        ranking.subList(0, mu) + ranking.subList(mu, mu + lambda).map { it.uniformMutate(0.1) }
     }
 }
 
-val surface = mutableListOf<Vector2>()
+fun PopulationEvolver.smoother(): PopulationEvolver = { p -> this(p).map { it.smoothen() }}
 
+// how many steps till start passed
+val surface = mutableListOf<Vector2>()
+val input = Scanner(System.`in`)
+var local = false // switch for local PC / codingame
 
 fun main(args: Array<String>) {
-    val input = Scanner(System.`in`)
+    if (args.getOrNull(0) == "local") local = true
+
     val N = input.nextInt() // the number of points used to draw the surface of Mars.
 
     // initialize the engine
@@ -149,35 +154,46 @@ fun main(args: Array<String>) {
         surface.add(Vector2(landX.toDouble(), landY.toDouble()))
     }
 
+    engine = Engine(surface.toTypedArray())
+    engine.params = EngineParams()
+    engine.calibrate()
 
-    engine = Engine(
-        surface.toTypedArray(), // map
-        Vector2(input.nextInt(), input.nextInt()), // position
-        Vector2(input.nextInt(), input.nextInt()), // velocity
-        input.nextInt(), // fuel
-        input.nextInt(), // rotation
-        input.nextInt()  // power
-    )
-
-    saveVisualizationToFile(0)
+    newImage()
 
 
     System.err.printf(
         "X=%dm, Y=%dm, HSpeed=%dm/s, VSpeed=%dm/s\nfuel=%d, yaw=%d°, power=%d\n",
-        engine.position.x.toInt(),
-        engine.position.y.toInt(),
-        engine.velocity.x.toInt(),
-        engine.velocity.y.toInt(),
-        engine.fuel,
-        engine.yaw,
-        engine.power
+        engine.params.position.x.toInt(),
+        engine.params.position.y.toInt(),
+        engine.params.velocity.x.toInt(),
+        engine.params.velocity.y.toInt(),
+        engine.params.fuel,
+        engine.params.yaw,
+        engine.params.power
     )
 
-    muLambdaSolver(::crashFit)
+    rollingHorizonSolver(muLambdaEvolver(50, 30).smoother(), EngineParams::linFit)
 }
 
-// 6   0 1500 1000 2000 2000 500 3500 500 5000 1500 6999 1000
-// 5000 2500 -50 0 1000 90 0
+/*
 
-// 7 0 100 1000 500 1500 1500 3000 1000 4000 150 5500 150 6999 800
-// 2500 2700 0 0 550 0 0
+// example
+ 6   0 1500 1000 2000 2000 500 3500 500 5000 1500 6999 1000
+ 5000 2500 -50 0 1000 90 0
+
+// easy on right
+ 7 0 100 1000 500 1500 1500 3000 1000 4000 150 5500 150 6999 800
+ 2500 2700 0 0 550 0 0
+
+// initial speed, correct side
+ 10 0 100 1000 500 1500 100 3000 100 3500 500 3700 200 5000 1500 5800 300 6000 1000 6999 2000
+ 6500 2800 -100 0 600 600 0
+
+// initial speed, wrong side
+7 0 100 1000 500 1500 1500 3000 1000 4000 150 5500 150 6999 800
+6500 2800 -90 0 750 750 0
+
+// deep canyon
+20 0 1000 300 1500 350 1400 500 2000 800 1800 1000 2500 1200 2100 1500 2400 2000 1000 2200 500 2500 100 2900 800 3000 500 3200 1000 3500 2000 3800 800 4000 200 5000 200 5500 1500 6999 2800
+500 2700 100 0 800 800 0
+ */

@@ -5,66 +5,70 @@ import com.github.nwillc.ksvg.elements.SVG
 import java.io.File
 import java.lang.StringBuilder
 
-lateinit var visualization: SVG
-lateinit var visualizationFile: File
-val visualize = true
+lateinit var image: SVG
 
-// creates SVG from engine path
-fun updateVisualization(path: List<Vector2>, sw: String, sc: String) {
-    fun svgify(vec: Vector2): String = "${(vec.x/10).toInt()} ${(300 - vec.y/10).toInt()}"
-    visualization.path {
+/** creates SVG with surface */
+fun newImage() {
+    image =  SVG.svg(true) {
+        width = "700"
+        height = "300"
+        style {
+            body = """
+            svg { fill: white; }            
+        """.trimIndent()
+        }
+        rect {
+            x = "0"
+            y = "0"
+            width = "100%"
+            height = "100%"
+            fill = "gray"
+        }
+    }.also { it.addPath(surface, "3", "black") }
+}
+
+/** add path to image */
+fun SVG.addPath(path: List<Vector2>, width: String, color: String) {
+    // to project point to svg-space vector
+    fun project(vec: Vector2): String = "${(vec.x / 10).toInt()} ${(300 - vec.y / 10).toInt()}"
+    path {
         fill = "none"
-        stroke = sc
-        strokeWidth = sw
+        stroke = color
+        strokeWidth = width
         d = path.subList(1, path.size)
             .joinToString(
-                prefix = "M ${svgify(path[0])} ",
+                prefix = "M ${project(path[0])} ",
                 separator = " "
-            ) { p -> "L ${svgify(p)}" }
+            ) { p -> "L ${project(p)}" }
     }
     // if cannot write then we want to see error why
 }
 
-
-
-fun saveVisualizationToFile(populationNumber: Int) {
-    if (::visualization.isInitialized) { // only when a visualization already exists
-        val sb = StringBuilder()
-        visualization.text {
-            x = "20"
-            y = "20"
-            body = "Population: $populationNumber"
-            fontFamily = "monospace"
-            fontSize = "20px"
-            fill = "black"
-        }
-        visualization.render(sb, RenderMode.FILE)
-
-        if (!::visualizationFile.isInitialized) {
-            visualizationFile = File("visualization.svg")
-            visualizationFile.createNewFile() // unsecure create file but whatever
-        }
-
-        visualizationFile.writeText(sb.toString())
+/** add population to image. First will be printed in greener color */
+fun SVG.addPopulation(population: List<EngineParams>, populationNumber: Int) {
+    population.subList(1, population.size).forEach {
+        addPath(it.path, "1", "lime")
     }
-    visualization = SVG.svg(true) {
-        width = "700"
-        height = "300"
-        style { body = """
-            svg { fill: white; }            
-        """.trimIndent()}
-    }
-    updateVisualization(surface, "3", "black")
+    addPath(population[0].path,  "1", "red")
 }
 
-// print population. First will be printed in greener color
-fun Population.visualize(populationNumber: Int) {
-    this.subList(1, size).forEach {
-        it.simulate(stepsPassed)
-        updateVisualization(engine.path, "1", "lime")
+
+/** Renders picture to svg file */
+fun SVG.renderPicture(populationNumber: Int, filename: String = "lander.svg") {
+    val sb = StringBuilder()
+
+    text {
+        x = "20"
+        y = "20"
+        body = "Population: $populationNumber"
+        fontFamily = "monospace"
+        fontSize = "20px"
+        fill = "black"
     }
-    this[0].simulate(stepsPassed)
-//    System.err.println("#${}")
-    updateVisualization(engine.path, "1", "red")
-    saveVisualizationToFile(populationNumber)
+
+    render(sb, RenderMode.FILE)
+
+    val image = File(filename)
+    image.createNewFile() // unsecure create file but whatever
+    image.writeText(sb.toString())
 }
