@@ -46,8 +46,8 @@ data class EngineParams(
     fun copy(): EngineParams = EngineParams(listOf(position), milestone, position.copy(), velocity.copy(), fuel, yaw, power)
     override fun toString(): String {
         return """
-            Pos=($position) Vel=($velocity) Yaw=$yaw 
-            Fuel=$fuel Power=$power Distance=${(milestone-engine.flatMilestone).toInt()}
+            |Pos=($position) Vel=($velocity) Yaw=$yaw 
+            |Fuel=$fuel Power=$power Distance=${(milestone-engine.flatMilestone).toInt()}
             """.trimMargin()
     }
 }

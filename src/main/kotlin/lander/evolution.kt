@@ -12,17 +12,29 @@ typealias Population = List<Chromosome>
 // mutates gene completely and randomly
 fun Gene.randomMutation() = Random.nextGene()
 
-fun Random.nextGene() = Action(Random.nextInt(-90, 91), Random.nextInt(0, 5))
-fun Random.nextChromosome(length: Int) = List(length) { Random.nextGene() }
+fun Random.nextGene(): Gene = Action(Random.nextInt(-90, 90 + 1), Random.nextInt(0, 4 + 1))
+fun Random.nextMarkovGene(gene: Action): Gene = Action(
+    Random.nextInt(max(-90, gene.rotation - 15), min(90, gene.rotation + 15) + 1),
+    Random.nextInt(max(0, gene.thrust - 1), min(4, gene.thrust + 1))
+)
+
+fun Random.nextChromosome(length: Int):Chromosome = List(length) { Random.nextGene() }
+fun Random.nextMarkovChromosome(length: Int): Chromosome {
+    val ch = mutableListOf(Random.nextGene())
+    repeat(length - 1) { ch.add(Random.nextMarkovGene(ch.last())) }
+    return ch
+}
+
 fun Random.nextPopulation(populationSize: Int, chromosomeLength: Int) =
     List(populationSize) { Random.nextChromosome(chromosomeLength) }
-
+fun Random.nextMarkovPopulation(populationSize: Int, chromosomeLength: Int) =
+    List(populationSize) { Random.nextMarkovChromosome(chromosomeLength) }
 // randomly mutate single gene
 fun Gene.mutate(probability: Double = 0.05) = if (Random.nextDouble() <= probability) Random.nextGene() else this
 
 // averages neighboring genes - returns first + averaged pairwise from second
 fun Chromosome.smoothen() = this.subList(0, 1) + zipWithNext { g1, g2 ->
-    Gene((g1.rotation + g2.rotation) / 2, (g1.thrust + g2.thrust) / 2)
+    Gene(((g1.rotation + g2.rotation) / 2.0).roundToInt(), ((g1.thrust + g2.thrust) / 2.0).roundToInt())
 }
 
 // mutates chromosome uniformly - each gene has given chance to mutate
@@ -66,6 +78,7 @@ fun Chromosome.evaluate(): EngineParams = engine.simulateFlight(this)
 
 typealias PopulationEvolver = (Population) -> Population
 typealias FitnessFunction = EngineParams.() -> Double
+typealias Ranking = List<Triple<Chromosome, EngineParams, Double>>
 
 /** solver using rolling horizon tactic. PopulationMutator
  * @param evolve    Function evolving the population. Returns sorted chromosomes with fitness.
@@ -79,26 +92,29 @@ fun rollingHorizonSolver(evolve: PopulationEvolver, fitness: FitnessFunction) {
 
     while (true) {
         val solverStart = System.currentTimeMillis() // when solver started
-
+        lateinit var ranking: Ranking
         // evolve population as much as possible in given timeframe
         while (System.currentTimeMillis() - solverStart < 995) { // FIXME: fit as much based on extrapolated time
             // create ranking as 3 column
-            val ranking = population.map {
+            ranking = population.map {
                 val ev = it.evaluate()
                 val fit = ev.fitness()
                 Triple(it, ev, fit)
             }.sortedBy { it.third }
 
-            image.addPath(ranking[0].second.path, "1", "red")
-            ranking.subList(1, ranking.size).forEach { image.addPath(it.second.path, "1", "lime") }
-            image.renderPicture(populationNr)
-            newImage()
-
             population = evolve(ranking.map { it.first })
             ++populationNr
 
         }
+
+        ranking.subList(1, ranking.size).forEach { image.addPath(it.second.path, "1", "lime") }
+        image.addPath(ranking[0].second.path, "1", "red")
+        image.renderPicture(populationNr)
+        newImage()
+
+
         val best = population[0]
+        // System.err.println("BEST: ${ranking[0].third}\n${ranking[0].second}")
 
         ++horizon
 
@@ -130,11 +146,11 @@ fun muLambdaEvolver(mu: Int, lambda: Int): PopulationEvolver = { ranking ->
         Random.nextPopulation(mu + lambda, chromosomeLength)
     } else {
         // mutate leftover genes
-        ranking.subList(0, mu) + ranking.subList(mu, mu + lambda).map { it.uniformMutate(0.1) }
+        ranking.subList(0, mu) + ranking.subList(0, lambda).map { it.uniformMutate(0.1) }
     }
 }
 
-fun PopulationEvolver.smoother(): PopulationEvolver = { p -> this(p).map { it.smoothen() }}
+fun PopulationEvolver.smoother(): PopulationEvolver = { p -> this(p).map { it.smoothen() } }
 
 // how many steps till start passed
 val surface = mutableListOf<Vector2>()
@@ -172,7 +188,7 @@ fun main(args: Array<String>) {
         engine.params.power
     )
 
-    rollingHorizonSolver(muLambdaEvolver(50, 30).smoother(), EngineParams::linFit)
+    rollingHorizonSolver(muLambdaEvolver(200, 50), EngineParams::penalty2)
 }
 
 /*
