@@ -18,7 +18,7 @@ fun Random.nextMarkovGene(gene: Action): Gene = Action(
     Random.nextInt(max(0, gene.thrust - 1), min(4, gene.thrust + 1))
 )
 
-fun Random.nextChromosome(length: Int):Chromosome = List(length) { Random.nextGene() }
+fun Random.nextChromosome(length: Int): Chromosome = List(length) { Random.nextGene() }
 fun Random.nextMarkovChromosome(length: Int): Chromosome {
     val ch = mutableListOf(Random.nextGene())
     repeat(length - 1) { ch.add(Random.nextMarkovGene(ch.last())) }
@@ -27,8 +27,10 @@ fun Random.nextMarkovChromosome(length: Int): Chromosome {
 
 fun Random.nextPopulation(populationSize: Int, chromosomeLength: Int) =
     List(populationSize) { Random.nextChromosome(chromosomeLength) }
+
 fun Random.nextMarkovPopulation(populationSize: Int, chromosomeLength: Int) =
     List(populationSize) { Random.nextMarkovChromosome(chromosomeLength) }
+
 // randomly mutate single gene
 fun Gene.mutate(probability: Double = 0.05) = if (Random.nextDouble() <= probability) Random.nextGene() else this
 
@@ -74,11 +76,11 @@ fun Chromosome.uniformCrossover(other: Chromosome, probability: Double = 0.5): P
 //   3. landing speed - as norm of velocity vector
 //
 
-fun Chromosome.evaluate(): EngineParams = engine.simulateFlight(this)
+fun Chromosome.evaluate(): LanderParams = engine.simulateFlight(this)
 
 typealias PopulationEvolver = (Population) -> Population
-typealias FitnessFunction = EngineParams.() -> Double
-typealias Ranking = List<Triple<Chromosome, EngineParams, Double>>
+typealias FitnessFunction = LanderParams.() -> Double
+typealias Ranking = List<Triple<Chromosome, LanderParams, Double>>
 
 /** solver using rolling horizon tactic. PopulationMutator
  * @param evolve    Function evolving the population. Returns sorted chromosomes with fitness.
@@ -122,8 +124,9 @@ fun rollingHorizonSolver(evolve: PopulationEvolver, fitness: FitnessFunction) {
         rollingChromosome = rollingChromosome + best[0] // append new gene to rolling chromosome
         population.map { it.subList(1, it.size) } // remove first genes
 
+
         if (!local)
-            engine.calibrate() // read new input
+            engine.calibrate(readSensors()) // read new input
         else {
             val p = engine.params
             if (engine.moveAndCheckCollided(best[0], p)) {
@@ -152,13 +155,15 @@ fun muLambdaEvolver(mu: Int, lambda: Int): PopulationEvolver = { ranking ->
 
 fun PopulationEvolver.smoother(): PopulationEvolver = { p -> this(p).map { it.smoothen() } }
 
-// how many steps till start passed
-val surface = mutableListOf<Vector2>()
-val input = Scanner(System.`in`)
-var local = false // switch for local PC / codingame
+fun readSensors(): LanderParams = LanderParams(
+    position = Vector2(input.nextInt(), input.nextInt()),
+    velocity = Vector2(input.nextInt(), input.nextInt()),
+    fuel = input.nextInt(),
+    yaw = input.nextInt(),
+    power = input.nextInt()
+)
 
-fun main(args: Array<String>) {
-    if (args.getOrNull(0) == "local") local = true
+fun landerControl(surface: List<Vector2>, initialParams: LanderParams) {
 
     val N = input.nextInt() // the number of points used to draw the surface of Mars.
 
@@ -171,8 +176,7 @@ fun main(args: Array<String>) {
     }
 
     engine = Engine(surface.toTypedArray())
-    engine.params = EngineParams()
-    engine.calibrate()
+    engine.params = readSensors()
 
     newImage()
 
@@ -188,7 +192,7 @@ fun main(args: Array<String>) {
         engine.params.power
     )
 
-    rollingHorizonSolver(muLambdaEvolver(200, 50), EngineParams::penalty2)
+    rollingHorizonSolver(muLambdaEvolver(200, 50), LanderParams::penalty2)
 }
 
 /*

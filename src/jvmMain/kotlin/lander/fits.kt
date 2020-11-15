@@ -3,7 +3,7 @@ package lander
 import kotlin.math.*
 
 // fitness method 1: polynomial from distance to landing site, fuel left and landing velocity
-fun EngineParams.polyFit(): Double = (
+fun LanderParams.polyFit(): Double = (
         1.0 * abs(milestone - engine.flatMilestone).pow(3)
         - 1.0 * fuel.toDouble().pow(2) + // make fuel more
         +1.0 * velocity.norm() +
@@ -11,7 +11,7 @@ fun EngineParams.polyFit(): Double = (
 
 
 // less is better
-fun EngineParams.linFit(): Double = (
+fun LanderParams.linFit(): Double = (
         1000 * abs(milestone - engine.flatMilestone) // closer = better
         - 100 * fuel.toDouble() // more fuel = better
         + 10 * velocity.norm()  // smaller relative velocity = better
@@ -19,10 +19,10 @@ fun EngineParams.linFit(): Double = (
 
 
 // closes to fit center = best
-fun EngineParams.crashFit(): Double = abs(milestone - engine.flatMilestone)
+fun LanderParams.crashFit(): Double = abs(milestone - engine.flatMilestone)
 
 // penalty for landing site is the same anywhere for the landing site.
-fun EngineParams.penalty1(): Double {
+fun LanderParams.penalty1(): Double {
     var penalty = 0.0
 
     if (abs(milestone - engine.flatMilestone) > engine.flatExtents - 100)
@@ -40,7 +40,7 @@ fun EngineParams.penalty1(): Double {
     return penalty
 }
 
-fun EngineParams.penalty2(): Double {
+fun LanderParams.penalty2(): Double {
 
     val vel = velocity.norm()
     val dd = abs(milestone - engine.flatMilestone)

@@ -45,7 +45,7 @@ fun SVG.addPath(path: List<Vector2>, width: String, color: String) {
 }
 
 /** add population to image. First will be printed in greener color */
-fun SVG.addPopulation(population: List<EngineParams>, populationNumber: Int) {
+fun SVG.addPopulation(population: List<LanderParams>, populationNumber: Int) {
     population.subList(1, population.size).forEach {
         addPath(it.path, "1", "lime")
     }

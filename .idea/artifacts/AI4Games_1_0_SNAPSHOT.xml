@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="AI4Games-1.0-SNAPSHOT">
+    <output-path>$PROJECT_DIR$/build/libs</output-path>
+    <root id="archive" name="AI4Games-1.0-SNAPSHOT.jar">
+      <element id="module-output" name="AI4Games.main" />
+    </root>
+  </artifact>
+</component>
