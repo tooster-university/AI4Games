@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="CompilerConfiguration">
-    <bytecodeTargetLevel target="15" />
+    <bytecodeTargetLevel target="15">
+      <module name="AI4Games.commonMain" target="13" />
+      <module name="AI4Games.commonTest" target="13" />
+      <module name="AI4Games.jvmMain" target="13" />
+      <module name="AI4Games.jvmTest" target="13" />
+    </bytecodeTargetLevel>
   </component>
 </project>

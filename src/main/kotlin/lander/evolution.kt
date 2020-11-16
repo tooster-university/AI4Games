@@ -1,15 +1,20 @@
 package lander
 
-import java.awt.Color
-import java.util.*
 import kotlin.math.*
 import kotlin.random.Random
 
 typealias Gene = Action
 typealias Chromosome = List<Gene>
 typealias Population = List<Chromosome>
+typealias Ranking = List<Rank>
+typealias PopulationEvolver = (Ranking) -> Population
+typealias FitnessFunction = LanderController.(params: LanderParams) -> Double
 
+data class Rank(val chromosome: Chromosome, val params: LanderParams, val fitness: Double)
 
+val Ranking.population: Population get() = map { it.chromosome }
+
+// ----------------------------------------------- evolution extensions on primitive data types ------------------------
 // mutates gene completely and randomly
 fun Gene.randomMutation() = Random.nextGene()
 
@@ -32,8 +37,10 @@ fun Random.nextPopulation(populationSize: Int, chromosomeLength: Int) =
 fun Random.nextMarkovPopulation(populationSize: Int, chromosomeLength: Int) =
     List(populationSize) { Random.nextMarkovChromosome(chromosomeLength) }
 
-// randomly mutate single gene
-fun Gene.mutate(probability: Double = 0.05) = if (Random.nextDouble() <= probability) Random.nextGene() else this
+/** randomly mutate single gene with probability */
+fun Gene.mutate(probability: Double = 0.05) = if (Random.nextDouble() <= probability) Random.nextGene() else this.copy()
+
+fun Chromosome.copy() = this.map { it.copy() }
 
 // averages neighboring genes - returns first + averaged pairwise from second
 fun Chromosome.smoothen() = this.subList(0, 1) + zipWithNext { g1, g2 ->
@@ -42,7 +49,7 @@ fun Chromosome.smoothen() = this.subList(0, 1) + zipWithNext { g1, g2 ->
 
 // mutates chromosome uniformly - each gene has given chance to mutate
 fun Chromosome.uniformMutate(probability: Double = 0.05) =
-    this.map { gene -> if (Random.nextDouble() <= probability) Random.nextGene() else gene }
+    this.map { gene -> if (Random.nextDouble() <= probability) Random.nextGene() else gene.copy() }
 
 // one crossover point
 infix fun Chromosome.singleCrossover(other: Chromosome): Pair<Chromosome, Chromosome> {
@@ -70,77 +77,81 @@ fun Chromosome.uniformCrossover(other: Chromosome, probability: Double = 0.5): P
                                 })
 }
 
-// returns fitness of this chromosome by simulating it's run.
-//  this particular function focuses on 3 factors in this order:
-//   1. distance along surface from the landing site
-//   2. fuel
-//   3. landing speed - as norm of velocity vector
-//
+// ------------------------------------------------------- CONTROLLER --------------------------------------------------
 
-fun Chromosome.evaluate(): EngineParams = engine.simulateFlight(this)
-
-typealias PopulationEvolver = (Population) -> Population
-typealias FitnessFunction = EngineParams.() -> Double
-typealias Ranking = List<Triple<Chromosome, EngineParams, Double>>
-
-/** solver using rolling horizon tactic. PopulationMutator
+/** solver using rolling horizon tactic.
  * @param evolve    Function evolving the population. Returns sorted chromosomes with fitness.
  *                  if population passed to evolver is empty, then it should create starting population
  */
-fun rollingHorizonSolver(evolve: PopulationEvolver, fitness: FitnessFunction) {
+fun LanderController.rollingHorizonSolver(evolve: PopulationEvolver, fitness: FitnessFunction) {
     var horizon = 0
-    var population = evolve(emptyList())
-    var rollingChromosome = listOf<Gene>() // resulting chromosome aka series of taken actions
-    var populationNr = 0 // ordinal of current population
+    var ranking: Ranking = emptyList()
+    var rollingChromosome: Chromosome = emptyList() // resulting chromosome aka series of taken actions
+    var populationNr = 0 // ordinal of current popsulation
 
-    io.clear()
-    io.drawPopulation(population.map { it.evaluate() }, 0)
-    io.paint()
+    val evolverRounds = -1
+    val visualizationInterval = 50
+//    var previousBest: Rank = Rank(emptyList(), LanderParams(), Double.POSITIVE_INFINITY)
 
     while (true) {
         val solverStart = System.currentTimeMillis() // when solver started
-        lateinit var ranking: Ranking
         var evolves = 0 // if evolverRounds is > 0 then at most that many evolves would roll
         // evolve population as much as possible in given timeframe
         while (evolves < evolverRounds || evolverRounds < 0 && System.currentTimeMillis() - solverStart < 995) { // FIXME: fit as much based on extrapolated time
             ++evolves
-            // create ranking as 3 column
-            ranking = population.map {
-                val ev = it.evaluate()
-                val fit = ev.fitness()
-                Triple(it, ev, fit)
-            }.sortedBy { it.third }
 
-            population = evolve(ranking.map { it.first })
+            // evolve population, rank create ranking using
+            ranking = evolve(ranking).map {
+                val params = simulate(it)
+                val fit = fitness(params)
+                Rank(it, params, fit)
+            }.sortedBy { it.fitness }
+            // visualize every nth population
+            if (populationNr % visualizationInterval == 0) {
+                io.visualization.bestTrajectory = ranking[0].params.path
+                io.visualization.trajectories = ranking.subList(1, ranking.size).map { it.params.path }
+                io.visualization.populationNumber = populationNr
+                io.visualization.repaint()
+            }
+
             ++populationNr
-
         }
-        io.clear()
-        io.drawPopulation(ranking.map { it.second }, populationNr)
+
 //        ranking.subList(1, ranking.size)
 //            .forEach { io.drawPath(it.second.path, Color.GREEN)/*image.addPath(it.second.path, "1", "lime")*/ }
 //        io.drawPath(ranking[0].second.path, Color.RED)        //image.addPath(ranking[0].second.path, "1", "red")
-        //image.renderPicture(populationNr)
-        //newImage()
-        io.paint()
-        io.error("best: ${ranking[0].third}")
+//        image.renderPicture(populationNr)
+//        newImage()
 
+        val best = ranking[0]
+        io.error("best: ${best.fitness}\n${best.params.pretty()}")
 
-        val best = population[0]
-        // System.err.println("BEST: ${ranking[0].third}\n${ranking[0].second}")
+//        if(best.fitness > previousBest.fitness){
+//            io.println(fitness(landerParams.deepCopy().simulateUntilCollision(previousBest.chromosome.subList(1, previousBest.chromosome.size))))
+//        } else {
+//            previousBest = Rank(best.chromosome.copy(), best.params.deepCopy(), best.fitness)
+//        }
+
+        // io.error("BEST: ${ranking[0].third}\n${ranking[0].second}")
 
         ++horizon
 
-        println("${best[0]}") // output best action from chromosome
-        rollingChromosome = rollingChromosome + best[0] // append new gene to rolling chromosome
-        population.map { it.subList(1, it.size) } // remove first genes
+        io.println("${best.chromosome[0]}") // output best action from chromosome
+        rollingChromosome = rollingChromosome + best.chromosome[0] // append new gene to rolling chromosome
 
-        // engine.calibrate() // read new input
-
-        if (engine.moveAndCheckCollided(best[0], engine.params)) {
-            System.err.println("OK? ${engine.params.acceptableLanding()}\n${engine.params}")
+        // landerParams = io.nextParams()
+        if (landerParams.stepAndCheckCollision(best.chromosome[0])) {
+            io.error("OK? ${landerParams.landingSucceeded()}\n${landerParams.pretty()}")
             return
         }
+
+        ranking = ranking.map {
+            Rank(
+                it.chromosome.subList(1, it.chromosome.size),
+                it.params,
+                it.fitness
+            )
+        } // remove first genes
     }
 }
 
@@ -150,54 +161,41 @@ fun rollingHorizonSolver(evolve: PopulationEvolver, fitness: FitnessFunction) {
 // here I don't use gaussian mutation but uniform mutation
 // this is not a proper mu, lambda - it just mutates worst lambda solutions keeping the best
 fun muLambdaEvolver(mu: Int, lambda: Int): PopulationEvolver = { ranking ->
-    val chromosomeLength = 200
     if (ranking.isEmpty()) {
-        Random.nextPopulation(mu + lambda, chromosomeLength)
+        Random.nextMarkovPopulation(mu + lambda, 200).map { it.smoothen() }
     } else {
         // mutate leftover genes
-        ranking.subList(0, mu) + ranking.subList(0, lambda).map { it.uniformMutate(0.1) }
+        val p = ranking.population
+        val original = p.subList(0, mu)
+        val mutated = p.subList(0, lambda).map { it.uniformMutate(1.0) }
+        original + mutated
+    }
+}
+
+fun rouletteEvolver(populationSize: Int, eliteSize: Int = 6): PopulationEvolver = { _ranking ->
+    if (_ranking.isEmpty()) {
+        Random.nextMarkovPopulation(populationSize, 200).map { it.smoothen() }
+    } else {
+        val ranking = if (_ranking.size > populationSize) _ranking.subList(0, populationSize) else _ranking
+
+        // elitism
+        val children: Population = ranking.subList(0, eliteSize).population.toMutableList()
+        val sum = ranking.fold(0.0, { s, rank -> s + rank.fitness }) // normalization
+        val cumulative = ranking.runningFold()
+        while(children.size < populationSize) {
+            val p1 = ranking[ranking.]
+            val p2 = ranking[]
+        }
+
+
+        children
     }
 }
 
 /** for debugging - should return constant population so the path should be the same as simulation*/
 fun nonEvolver(): PopulationEvolver = { ranking ->
     if (ranking.isEmpty())
-        Random.nextMarkovPopulation(1, 200)
+        Random.nextMarkovPopulation(100, 200)
     else
-        ranking
-}
-
-fun PopulationEvolver.smoother(): PopulationEvolver = { p -> this(p).map { it.smoothen() } }
-
-// how many steps till start passed
-val surface = mutableListOf<Vector2>()
-val evolverRounds = 1
-lateinit var io: IO
-
-fun main(args: Array<String>) {
-    io = IO(MAP.valueOf(args[0]))
-
-    val N = io.nextInt() // the number of points used to draw the surface of Mars.
-
-    // initialize the engine
-    for (i in 0 until N)
-        surface.add(Vector2(io.nextInt().toDouble(), io.nextInt().toDouble()))
-
-    engine = Engine(surface.toTypedArray())
-    engine.params = EngineParams()
-    engine.calibrate()
-
-    System.err.printf(
-        "X=%dm, Y=%dm, HSpeed=%dm/s, VSpeed=%dm/s\nfuel=%d, yaw=%d°, power=%d\n",
-        engine.params.position.x.toInt(),
-        engine.params.position.y.toInt(),
-        engine.params.velocity.x.toInt(),
-        engine.params.velocity.y.toInt(),
-        engine.params.fuel,
-        engine.params.yaw,
-        engine.params.power
-    )
-
-//    rollingHorizonSolver(muLambdaEvolver(200, 50), EngineParams::penalty1)
-    rollingHorizonSolver(nonEvolver(), EngineParams::penalty1)
+        ranking.population
 }

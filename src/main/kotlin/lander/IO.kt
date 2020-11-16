@@ -3,10 +3,12 @@ package lander
 import com.github.nwillc.ksvg.RenderMode
 import com.github.nwillc.ksvg.elements.SVG
 import java.awt.*
+import java.awt.image.BufferStrategy
 import java.io.*
 import java.lang.StringBuilder
 import java.util.*
 import javax.swing.JFrame
+import javax.swing.JPanel
 
 enum class MAP {
     EXAMPLE, EASY_RIGHT, INITIAL_SPEED_CORRECT_SIDE, INITIAL_SPEED_WRONG_SIDE, DEEP_CANYON
@@ -34,58 +36,72 @@ val maps = mapOf(
         500 2700 100 0 800 800 0""",
 )
 
-class IO(map: MAP) : Canvas() {
-    val frame = JFrame("lander")
-    val canvas = Canvas()
-    val g: Graphics2D
-    val w = 700
-    val h = 300
-    lateinit var image: SVG
+class IO(map: MAP) {
+    private val frame = JFrame("lander")
+    private val input = Scanner(StringReader(maps.getValue(map)))
 
-    val input = Scanner(StringReader(maps.getValue(map)))
+    val visualization = Visualization()
+
+    class Visualization : JPanel() {
+
+        var terrain: Path2D = emptyList()
+        var trajectories: List<Path2D> = emptyList()
+        var bestTrajectory: Path2D = emptyList()
+        var populationNumber: Int = 0
+
+        init {
+            background = Color.lightGray
+        }
+
+        override fun getPreferredSize(): Dimension = Dimension(700, 300)
+
+        private fun Graphics2D.drawPath(path: Path2D, color: Color) {
+            this.color = color
+            drawPolyline(
+                path.map { it.x.toInt() / 10 }.toIntArray(),
+                path.map { 300 - it.y.toInt() / 10 }.toIntArray(),
+                path.size
+            )
+        }
+
+        override fun paintComponent(g: Graphics?) {
+            super.paintComponent(g)
+            val g2 = g as Graphics2D
+            g2.setRenderingHint(
+                RenderingHints.KEY_ANTIALIASING,
+                RenderingHints.VALUE_ANTIALIAS_ON
+            )
+            g2.drawPath(terrain, Color.BLACK)
+            trajectories.forEach {
+                g2.drawPath(it, Color.GREEN)
+            }
+            g2.drawPath(bestTrajectory, Color.RED)
+            g2.color = Color.BLACK
+            g2.drawString("Population $populationNumber", 10, 30)
+        }
+    }
 
     init {
         frame.defaultCloseOperation = JFrame.EXIT_ON_CLOSE
-        canvas.setSize(700, 300)
-        frame.add(canvas)
+        frame.add(visualization)
         frame.pack()
         frame.isVisible = true
-        g = canvas.graphics as Graphics2D
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
     }
 
-    fun clear(){
-        g.clearRect(0, 0, w, h)
-        g.stroke = BasicStroke(2.0f)
-    }
-
-    override fun paint(_g: Graphics) {
-        val g = _g as Graphics2D
-        super.paint(g)
-        drawPath(surface, Color.BLACK)
-    }
-
-    fun drawPath(path: List<Vector2>, c: Color) {
-        g.color = c
-        val (xs, ys) =
-            path.map { it.x.toInt() / 10 }.toIntArray() to path.map { 300 - it.y.toInt() / 10 }.toIntArray()
-        g.drawPolyline(xs, ys, path.size)
-    }
-
-    fun drawPopulation(population: List<EngineParams>, populationNumber: Int) {
-        population.subList(1, population.size).forEach {
-            drawPath(it.path, Color.GREEN)
-        }
-        drawPath(population[0].path, Color.RED)
-        g.drawString("Population $populationNumber", 10, 30)
-    }
-
-    fun paint() = paint(g)
     fun error(s: String) = System.err.println(s)
     fun nextInt() = input.nextInt()
-
+    fun nextParams() = LanderParams(
+        position = Vector2(nextInt(), nextInt()),
+        velocity = Vector2(nextInt(), nextInt()),
+        fuel = nextInt(),
+        yaw = nextInt(),
+        power = nextInt(),
+    )
+    fun println(s: String) = System.out.println(s)
 
     // ------------------------------------------------- SVG -----------------------------------------------------------
+
+    lateinit var image: SVG
 
     /** creates SVG with surface */
     fun newImage() {
@@ -104,7 +120,7 @@ class IO(map: MAP) : Canvas() {
                 height = "100%"
                 fill = "gray"
             }
-        }.also { it.addPath(surface, "3", "black") }
+        }.also { it.addPath(visualization.terrain, "3", "black") }
     }
 
     /** add path to image */
@@ -125,7 +141,7 @@ class IO(map: MAP) : Canvas() {
     }
 
     /** add population to image. First will be printed in greener color */
-    fun SVG.addPopulation(population: List<EngineParams>, populationNumber: Int) {
+    fun SVG.addPopulation(population: List<LanderParams>, populationNumber: Int) {
         population.subList(1, population.size).forEach {
             addPath(it.path, "1", "lime")
         }
