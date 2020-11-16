@@ -43,7 +43,7 @@ data class EngineParams(
             && abs(velocity.x) <= 20)
 
     // copy doesn't preserve path on purpose
-    fun copy(): EngineParams = EngineParams(listOf(position), milestone, position.copy(), velocity.copy(), fuel, yaw, power)
+    fun copy(): EngineParams = EngineParams(listOf(position.copy()), milestone, position.copy(), velocity.copy(), fuel, yaw, power)
     override fun toString(): String {
         return """
             |Pos=($position) Vel=($velocity) Yaw=$yaw 
@@ -102,11 +102,10 @@ class Engine(val surface: Array<Vector2>) {
     /** simulates flight, returns parameters on land contact (1 frame after collision) */
     fun simulateFlight(actions: List<Action>): EngineParams {
         val actionIterator = actions.iterator()
-        var action = Action(0, 0) // dummy action
+        lateinit var action: Action
         val simParams = params.copy() // simParams used to simulate steps
         do {
-            if (actionIterator.hasNext())
-                action = actionIterator.next()
+            action = actionIterator.next()
         } while (!moveAndCheckCollided(action, simParams))
         return simParams
     }

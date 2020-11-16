@@ -77,6 +77,7 @@ class IO(map: MAP) : Canvas() {
             drawPath(it.path, Color.GREEN)
         }
         drawPath(population[0].path, Color.RED)
+        g.drawString("Population $populationNumber", 10, 30)
     }
 
     fun paint() = paint(g)

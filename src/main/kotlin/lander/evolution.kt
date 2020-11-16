@@ -94,14 +94,16 @@ fun rollingHorizonSolver(evolve: PopulationEvolver, fitness: FitnessFunction) {
     var populationNr = 0 // ordinal of current population
 
     io.clear()
-    io.drawPopulation(population.map { it.evaluate() },  0)
+    io.drawPopulation(population.map { it.evaluate() }, 0)
     io.paint()
 
     while (true) {
         val solverStart = System.currentTimeMillis() // when solver started
         lateinit var ranking: Ranking
+        var evolves = 0 // if evolverRounds is > 0 then at most that many evolves would roll
         // evolve population as much as possible in given timeframe
-        while (System.currentTimeMillis() - solverStart < 995) { // FIXME: fit as much based on extrapolated time
+        while (evolves < evolverRounds || evolverRounds < 0 && System.currentTimeMillis() - solverStart < 995) { // FIXME: fit as much based on extrapolated time
+            ++evolves
             // create ranking as 3 column
             ranking = population.map {
                 val ev = it.evaluate()
@@ -114,12 +116,14 @@ fun rollingHorizonSolver(evolve: PopulationEvolver, fitness: FitnessFunction) {
 
         }
         io.clear()
-        ranking.subList(1, ranking.size)
-            .forEach { io.drawPath(it.second.path, Color.GREEN)/*image.addPath(it.second.path, "1", "lime")*/ }
-        io.drawPath(ranking[0].second.path, Color.RED)        //image.addPath(ranking[0].second.path, "1", "red")
+        io.drawPopulation(ranking.map { it.second }, populationNr)
+//        ranking.subList(1, ranking.size)
+//            .forEach { io.drawPath(it.second.path, Color.GREEN)/*image.addPath(it.second.path, "1", "lime")*/ }
+//        io.drawPath(ranking[0].second.path, Color.RED)        //image.addPath(ranking[0].second.path, "1", "red")
         //image.renderPicture(populationNr)
         //newImage()
         io.paint()
+        io.error("best: ${ranking[0].third}")
 
 
         val best = population[0]
@@ -133,12 +137,10 @@ fun rollingHorizonSolver(evolve: PopulationEvolver, fitness: FitnessFunction) {
 
         // engine.calibrate() // read new input
 
-        val p = engine.params
-        if (engine.moveAndCheckCollided(best[0], p)) {
+        if (engine.moveAndCheckCollided(best[0], engine.params)) {
             System.err.println("OK? ${engine.params.acceptableLanding()}\n${engine.params}")
             return
         }
-        engine.params = p
     }
 }
 
@@ -157,10 +159,19 @@ fun muLambdaEvolver(mu: Int, lambda: Int): PopulationEvolver = { ranking ->
     }
 }
 
+/** for debugging - should return constant population so the path should be the same as simulation*/
+fun nonEvolver(): PopulationEvolver = { ranking ->
+    if (ranking.isEmpty())
+        Random.nextMarkovPopulation(1, 200)
+    else
+        ranking
+}
+
 fun PopulationEvolver.smoother(): PopulationEvolver = { p -> this(p).map { it.smoothen() } }
 
 // how many steps till start passed
 val surface = mutableListOf<Vector2>()
+val evolverRounds = 1
 lateinit var io: IO
 
 fun main(args: Array<String>) {
@@ -187,5 +198,6 @@ fun main(args: Array<String>) {
         engine.params.power
     )
 
-    rollingHorizonSolver(muLambdaEvolver(200, 50), EngineParams::penalty2)
+//    rollingHorizonSolver(muLambdaEvolver(200, 50), EngineParams::penalty1)
+    rollingHorizonSolver(nonEvolver(), EngineParams::penalty1)
 }
