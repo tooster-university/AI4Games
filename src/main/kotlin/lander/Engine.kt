@@ -91,12 +91,12 @@ class Engine(val surface: Array<Vector2>) {
 
     // reads input and overwrites parameters. Logs the path
     fun calibrate(){
-        params.position = Vector2(input.nextInt(), input.nextInt())
+        params.position = Vector2(io.nextInt(), io.nextInt())
         params.path = params.path + params.position // log position
-        params.velocity = Vector2(input.nextInt(), input.nextInt())
-        params.fuel = input.nextInt()
-        params.yaw = input.nextInt()
-        params.power = input.nextInt()
+        params.velocity = Vector2(io.nextInt(), io.nextInt())
+        params.fuel = io.nextInt()
+        params.yaw = io.nextInt()
+        params.power = io.nextInt()
     }
 
     /** simulates flight, returns parameters on land contact (1 frame after collision) */

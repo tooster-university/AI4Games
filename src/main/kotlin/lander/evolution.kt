@@ -1,5 +1,6 @@
 package lander
 
+import java.awt.Color
 import java.util.*
 import kotlin.math.*
 import kotlin.random.Random
@@ -18,7 +19,7 @@ fun Random.nextMarkovGene(gene: Action): Gene = Action(
     Random.nextInt(max(0, gene.thrust - 1), min(4, gene.thrust + 1))
 )
 
-fun Random.nextChromosome(length: Int):Chromosome = List(length) { Random.nextGene() }
+fun Random.nextChromosome(length: Int): Chromosome = List(length) { Random.nextGene() }
 fun Random.nextMarkovChromosome(length: Int): Chromosome {
     val ch = mutableListOf(Random.nextGene())
     repeat(length - 1) { ch.add(Random.nextMarkovGene(ch.last())) }
@@ -27,8 +28,10 @@ fun Random.nextMarkovChromosome(length: Int): Chromosome {
 
 fun Random.nextPopulation(populationSize: Int, chromosomeLength: Int) =
     List(populationSize) { Random.nextChromosome(chromosomeLength) }
+
 fun Random.nextMarkovPopulation(populationSize: Int, chromosomeLength: Int) =
     List(populationSize) { Random.nextMarkovChromosome(chromosomeLength) }
+
 // randomly mutate single gene
 fun Gene.mutate(probability: Double = 0.05) = if (Random.nextDouble() <= probability) Random.nextGene() else this
 
@@ -90,6 +93,10 @@ fun rollingHorizonSolver(evolve: PopulationEvolver, fitness: FitnessFunction) {
     var rollingChromosome = listOf<Gene>() // resulting chromosome aka series of taken actions
     var populationNr = 0 // ordinal of current population
 
+    io.clear()
+    io.drawPopulation(population.map { it.evaluate() },  0)
+    io.paint()
+
     while (true) {
         val solverStart = System.currentTimeMillis() // when solver started
         lateinit var ranking: Ranking
@@ -106,11 +113,13 @@ fun rollingHorizonSolver(evolve: PopulationEvolver, fitness: FitnessFunction) {
             ++populationNr
 
         }
-
-        ranking.subList(1, ranking.size).forEach { image.addPath(it.second.path, "1", "lime") }
-        image.addPath(ranking[0].second.path, "1", "red")
-        image.renderPicture(populationNr)
-        newImage()
+        io.clear()
+        ranking.subList(1, ranking.size)
+            .forEach { io.drawPath(it.second.path, Color.GREEN)/*image.addPath(it.second.path, "1", "lime")*/ }
+        io.drawPath(ranking[0].second.path, Color.RED)        //image.addPath(ranking[0].second.path, "1", "red")
+        //image.renderPicture(populationNr)
+        //newImage()
+        io.paint()
 
 
         val best = population[0]
@@ -122,16 +131,14 @@ fun rollingHorizonSolver(evolve: PopulationEvolver, fitness: FitnessFunction) {
         rollingChromosome = rollingChromosome + best[0] // append new gene to rolling chromosome
         population.map { it.subList(1, it.size) } // remove first genes
 
-        if (!local)
-            engine.calibrate() // read new input
-        else {
-            val p = engine.params
-            if (engine.moveAndCheckCollided(best[0], p)) {
-                System.err.println("OK? ${engine.params.acceptableLanding()}\n${engine.params}")
-                return
-            }
-            engine.params = p
+        // engine.calibrate() // read new input
+
+        val p = engine.params
+        if (engine.moveAndCheckCollided(best[0], p)) {
+            System.err.println("OK? ${engine.params.acceptableLanding()}\n${engine.params}")
+            return
         }
+        engine.params = p
     }
 }
 
@@ -154,28 +161,20 @@ fun PopulationEvolver.smoother(): PopulationEvolver = { p -> this(p).map { it.sm
 
 // how many steps till start passed
 val surface = mutableListOf<Vector2>()
-val input = Scanner(System.`in`)
-var local = false // switch for local PC / codingame
+lateinit var io: IO
 
 fun main(args: Array<String>) {
-    if (args.getOrNull(0) == "local") local = true
+    io = IO(MAP.valueOf(args[0]))
 
-    val N = input.nextInt() // the number of points used to draw the surface of Mars.
+    val N = io.nextInt() // the number of points used to draw the surface of Mars.
 
     // initialize the engine
-    for (i in 0 until N) {
-        val landX = input.nextInt() // X coordinate of a surface point. (0 to 6999)
-        val landY =
-            input.nextInt() // Y coordinate of a surface point. By linking all the points together in a sequential fashion, you form the surface of Mars.
-        surface.add(Vector2(landX.toDouble(), landY.toDouble()))
-    }
+    for (i in 0 until N)
+        surface.add(Vector2(io.nextInt().toDouble(), io.nextInt().toDouble()))
 
     engine = Engine(surface.toTypedArray())
     engine.params = EngineParams()
     engine.calibrate()
-
-    newImage()
-
 
     System.err.printf(
         "X=%dm, Y=%dm, HSpeed=%dm/s, VSpeed=%dm/s\nfuel=%d, yaw=%d°, power=%d\n",
@@ -190,26 +189,3 @@ fun main(args: Array<String>) {
 
     rollingHorizonSolver(muLambdaEvolver(200, 50), EngineParams::penalty2)
 }
-
-/*
-
-// example
- 6   0 1500 1000 2000 2000 500 3500 500 5000 1500 6999 1000
- 5000 2500 -50 0 1000 90 0
-
-// easy on right
- 7 0 100 1000 500 1500 1500 3000 1000 4000 150 5500 150 6999 800
- 2500 2700 0 0 550 0 0
-
-// initial speed, correct side
- 10 0 100 1000 500 1500 100 3000 100 3500 500 3700 200 5000 1500 5800 300 6000 1000 6999 2000
- 6500 2800 -100 0 600 600 0
-
-// initial speed, wrong side
-7 0 100 1000 500 1500 1500 3000 1000 4000 150 5500 150 6999 800
-6500 2800 -90 0 750 750 0
-
-// deep canyon
-20 0 1000 300 1500 350 1400 500 2000 800 1800 1000 2500 1200 2100 1500 2400 2000 1000 2200 500 2500 100 2900 800 3000 500 3200 1000 3500 2000 3800 800 4000 200 5000 200 5500 1500 6999 2800
-500 2700 100 0 800 800 0
- */
