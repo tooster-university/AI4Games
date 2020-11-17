@@ -62,3 +62,11 @@ infix fun Double.almostEquals(other: Double) = abs(this - other) < EPS
 data class Action(val rotation: Int, val thrust: Int) {
     override fun toString(): String = "$rotation $thrust"
 }
+
+fun lerp(a: Double, b: Double, fraction: Double): Double = a + (b - a) * fraction
+fun lerp(a: Int, b: Int, fraction: Double): Int = lerp(a.toDouble(), b.toDouble(), fraction).toInt()
+fun lerp(a: Vector2, b: Vector2, fraction: Double): Vector2 =
+    Vector2(lerp(a.x, b.x, fraction), lerp(a.y, b.y, fraction))
+
+fun lerp(a: Action, b: Action, fraction: Double): Action =
+    Action(lerp(a.rotation, b.rotation, fraction), lerp(a.thrust, b.thrust, fraction))

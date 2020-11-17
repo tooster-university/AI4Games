@@ -7,7 +7,7 @@ typealias Path2D = List<Vector2>
 // represents parameters of the simulation in a given step
 class LanderParams(
     var path: Path2D = listOf(), // path so far
-    var milestone: Double = 0.0, // milestone of landing - used with flatMilestone to get distance along surface.
+    var distanceFromFlat: Double = 0.0, //
     var position: Vector2 = Vector2(0, 0), // position of the aircraft
     var velocity: Vector2 = Vector2(0, 0), // velocity of the aircraft
     var fuel: Int = 0, // fuel left
@@ -18,7 +18,7 @@ class LanderParams(
     fun deepCopy(): LanderParams =
         LanderParams(
             path = listOf(position.copy()),
-            milestone = milestone,
+            distanceFromFlat = distanceFromFlat,
             position = position.copy(),
             velocity = velocity.copy(),
             fuel = fuel,
@@ -31,7 +31,7 @@ class LanderParams(
 class LanderController(
     val io: IO,
     val surface: Surface,
-    var landerParams: LanderParams
+    var landerParams: LanderParams,
 ) {
 
 
@@ -50,15 +50,15 @@ class LanderController(
 
     fun LanderParams.landingSucceeded() = (
             yaw == 0
-            && abs(milestone - surface.flatMilestone) < surface.flatExtents
+            && distanceFromFlat <= surface.flatExtents
             && abs(velocity.y) <= 40.0
             && abs(velocity.x) <= 20)
 
     fun LanderParams.pretty(): String {
         return """
-            |Pos=($position) Vel=($velocity) Yaw=$yaw 
-            |Fuel=$fuel Power=$power Distance=${(milestone - surface.flatMilestone).toInt()}
-            """.trimMargin()
+            |   Pos=(%.0f %.0f) Vel=(%.2f %.2f) Yaw=%d 
+            |   Fuel=%d Power=%d Distance=%.0f}
+            """.trimMargin().format(position.x, position.y, velocity.x, velocity.y, yaw, fuel, power, distanceFromFlat)
     }
 
     /** simulates flight, returns parameters on land contact (1 frame after collision) */
@@ -72,7 +72,7 @@ class LanderController(
 
     // https://www.codingame.com/forum/t/mars-lander-puzzle-discussion/32/129
     /** Overwrites params with simulation. Returns true if collided.*/
-    fun LanderParams.stepAndCheckCollision(action: Action) : Boolean{
+    fun LanderParams.stepAndCheckCollision(action: Action): Boolean {
         var simTime = 0.0
 
         // -------- save previous state
@@ -111,25 +111,37 @@ class LanderController(
 
         // -------- collision check
         // bounds check
-        if (position.x < 0 || position.x > 6999) {
-            milestone = surface.surfaceLength + position.y // make it artificially climb down the walls
-            return true
-        } else if (position.y > 3000) {
-            // artificially climb towards walls
-            milestone = surface.surfaceLength + position.y + 3500 - abs(position.x - 3500)
-            return true
-        }
-
-        // surface check
-        milestone = 0.0
-        for ((p1, p2) in surface.terrain.zipWithNext()) {
-            if (collides(oldPosition, position, p1, p2)) {
-                milestone += distance(p1, (oldPosition + position) / 2.0)
+        when {
+            position.x < 0 -> {
+                distanceFromFlat = surface.flatMilestone + position.y
                 return true
             }
-            milestone += distance(p1, p2)
+            position.x > 6999 -> {
+                distanceFromFlat = surface.surfaceLength - surface.flatMilestone + position.y
+                return true
+            }
+            position.y > 3000 -> {
+                // artificially climb towards walls
+                distanceFromFlat = min(surface.flatMilestone + position.y + position.x,
+                                       surface.surfaceLength - surface.flatMilestone + position.y + 7000 - position.x)
+                return true
+            }
+
+            // surface check by walking along
+            else -> {
+                var milestone = 0.0 // point on surface that was hit (0 is start of surface)
+                for ((p1, p2) in surface.terrain.zipWithNext()) {
+                    if (collides(oldPosition, position, p1, p2)) {
+                        milestone += distance(p1, (oldPosition + position) / 2.0) // center of segment as hitpoint
+                        distanceFromFlat = abs(surface.flatMilestone - milestone)
+                        return true
+                    }
+                    milestone += distance(p1, p2) // walk along the surface
+                }
+                return false
+            }
         }
-        return false
+
     }
 
     fun simulate(actions: List<Action>): LanderParams = landerParams.deepCopy().simulateUntilCollision(actions)
@@ -148,6 +160,11 @@ fun main(args: Array<String>) {
         terrain.add(Vector2(io.nextInt().toDouble(), io.nextInt().toDouble()))
     // ------- read initial params
     val controller = LanderController(io, Surface(terrain), io.nextParams())
-    controller.rollingHorizonSolver(muLambdaEvolver(200, 150), LanderController::penalty2)
+    controller.rollingHorizonSolver(
+        rouletteEvolver(200, chromosomeLength = 150, eliteSize = 20, mutationProbability = 0.2),
+        LanderController::score1,
+        visualizationInterval = 100,
+    )
+//    controller.rollingHorizonSolver(muLambdaEvolver(200, 150), LanderController::penalty2)
 //    controller.rollingHorizonSolver(nonEvolver(), LanderController::penalty1)
 }
