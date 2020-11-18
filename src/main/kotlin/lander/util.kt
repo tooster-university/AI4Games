@@ -1,10 +1,7 @@
 package lander
 // from https://cp-algorithms.com/geometry/segments-intersection.html
 
-import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.sqrt
+import kotlin.math.*
 
 const val EPS = 1e-6
 
@@ -70,3 +67,8 @@ fun lerp(a: Vector2, b: Vector2, fraction: Double): Vector2 =
 
 fun lerp(a: Action, b: Action, fraction: Double): Action =
     Action(lerp(a.rotation, b.rotation, fraction), lerp(a.thrust, b.thrust, fraction))
+
+fun clamp(start: Int, end: Int, value: Int) = max(start, min(value, end))
+fun clamp(start: Double, end: Double, value: Double) = max(start, min(value, end))
+
+fun Int.toRadian() = this * PI / 180.0

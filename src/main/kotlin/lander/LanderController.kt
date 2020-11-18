@@ -26,6 +26,12 @@ class LanderParams(
             power = power
         )
 
+    fun pretty(): String {
+        return """
+            |   Pos=(%.0f %.0f) Vel=(%.2f %.2f) Yaw=%d 
+            |   Fuel=%d Power=%d Distance=%.0f
+            """.trimMargin().format(position.x, position.y, velocity.x, velocity.y, yaw, fuel, power, distanceFromFlat)
+    }
 }
 
 class LanderController(
@@ -39,7 +45,6 @@ class LanderController(
     private val G = 3.711 // gravitational force
     private val ANGULAR_SPEED = 15 // 15 degrees per second
 
-    private fun Int.toRadian() = this * PI / 180.0
     infix fun Double.almostEquals(other: Double) = abs(this - other) < EPS
 
     init {
@@ -54,12 +59,6 @@ class LanderController(
             && abs(velocity.y) <= 40.0
             && abs(velocity.x) <= 20)
 
-    fun LanderParams.pretty(): String {
-        return """
-            |   Pos=(%.0f %.0f) Vel=(%.2f %.2f) Yaw=%d 
-            |   Fuel=%d Power=%d Distance=%.0f}
-            """.trimMargin().format(position.x, position.y, velocity.x, velocity.y, yaw, fuel, power, distanceFromFlat)
-    }
 
     /** simulates flight, returns parameters on land contact (1 frame after collision) */
     fun LanderParams.simulateUntilCollision(actions: List<Action>): LanderParams {
@@ -122,8 +121,10 @@ class LanderController(
             }
             position.y > 3000 -> {
                 // artificially climb towards walls
-                distanceFromFlat = min(surface.flatMilestone + position.y + position.x,
-                                       surface.surfaceLength - surface.flatMilestone + position.y + 7000 - position.x)
+                distanceFromFlat = min(
+                    surface.flatMilestone + position.y + position.x,
+                    surface.surfaceLength - surface.flatMilestone + position.y + 7000 - position.x
+                )
                 return true
             }
 
@@ -151,19 +152,27 @@ class LanderController(
 fun main(args: Array<String>) {
 
     // initialize IO with map data
-    val io = IO(MAP.valueOf(args[0]))
+    val io = IO(if(args.isEmpty()) MAP.EXAMPLE else MAP.valueOf(args[0]))
 
     // ------- read terrain
     val n = io.nextInt() // the number of points used to draw the surface of Mars.
     val terrain = mutableListOf<Vector2>()
-    for (i in 0 until n)
-        terrain.add(Vector2(io.nextInt().toDouble(), io.nextInt().toDouble()))
+    for (i in 0 until n) {
+        val (x, y) = io.nextInt() to io.nextInt()
+        terrain.add(Vector2(x, y))
+    }
     // ------- read initial params
     val controller = LanderController(io, Surface(terrain), io.nextParams())
     controller.rollingHorizonSolver(
-        rouletteEvolver(200, chromosomeLength = 150, eliteSize = 20, mutationProbability = 0.2),
+        rouletteEvolver(
+            populationSize = 200,
+            chromosomeLength = 300,
+            eliteSize = 40,
+//            mutationProbability = 0.2,
+        ),
         LanderController::score1,
-        visualizationInterval = 100,
+        visualizationInterval = 20,
+        evolverRounds = -95
     )
 //    controller.rollingHorizonSolver(muLambdaEvolver(200, 150), LanderController::penalty2)
 //    controller.rollingHorizonSolver(nonEvolver(), LanderController::penalty1)

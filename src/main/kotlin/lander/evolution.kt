@@ -19,9 +19,9 @@ val Ranking.population: Population get() = map { it.chromosome }
 fun Gene.randomMutation() = Random.nextGene()
 
 fun Random.nextGene(): Gene = Action(Random.nextInt(-90, 90 + 1), Random.nextInt(0, 4 + 1))
-fun Random.nextMarkovGene(gene: Action): Gene = Action(
-    Random.nextInt(max(-90, gene.rotation - 15), min(90, gene.rotation + 15) + 1),
-    Random.nextInt(max(0, gene.thrust - 1), min(4, gene.thrust + 1))
+fun Random.nextMarkovGene(gene: Action, rotationSpread: Int = 5): Gene = Action(
+    clamp(-90, 90, gene.rotation + Random.nextInt(-rotationSpread, 1+rotationSpread)),
+    clamp(0, 4, gene.thrust + Random.nextInt(-1, 1+1))
 )
 
 fun Random.nextChromosome(length: Int): Chromosome = List(length) { Random.nextGene() }
@@ -118,7 +118,9 @@ fun LanderController.rollingHorizonSolver(
         var evolves = 0 // if evolverRounds is > 0 then at most that many evolves would roll
         // evolve population as much as possible in given timeframe
         // FIXME: fit as much based on extrapolated time
+        var evoStart = solverStart
         while (evolves < evolverRounds || evolverRounds < 0 && System.currentTimeMillis() - solverStart < -evolverRounds) {
+            evoStart = System.currentTimeMillis()
             ++evolves
 
             // evolve population, rank create ranking using
@@ -129,7 +131,7 @@ fun LanderController.rollingHorizonSolver(
             }.sortedByDescending { it.fitness }
             // visualize every nth population
             if (populationNr % visualizationInterval == 0) {
-                io.visualization.bestTrajectory = ranking[0].params.path
+                io.visualization.best = ranking[0]
                 io.visualization.trajectories = ranking.subList(1, ranking.size).map { it.params.path }
                 io.visualization.populationNumber = populationNr
                 io.visualization.repaint()
@@ -145,7 +147,9 @@ fun LanderController.rollingHorizonSolver(
 //        newImage()
 
         val best = ranking[0]
-        io.error("best: ${best.fitness}\n${best.params.pretty()}")
+        io.error("""prediction OK?: ${best.params.landingSucceeded()}
+            |best: ${best.fitness}
+            |${best.params.pretty()}""".trimMargin())
 
 //        if(best.fitness > previousBest.fitness){
 //            io.println(fitness(landerParams.deepCopy().simulateUntilCollision(previousBest.chromosome.subList(1, previousBest.chromosome.size))))
@@ -162,7 +166,7 @@ fun LanderController.rollingHorizonSolver(
 
         // landerParams = io.nextParams()
         if (landerParams.stepAndCheckCollision(best.chromosome[0])) {
-            io.error("OK? ${landerParams.landingSucceeded()}\n${landerParams.pretty()}")
+            io.error("OK? ${landerParams.landingSucceeded()}")
             return
         }
 
@@ -203,7 +207,7 @@ fun rouletteEvolver(
 ): PopulationEvolver =
     { _ranking ->
         if (_ranking.isEmpty()) {
-            Random.nextMarkovPopulation(populationSize, chromosomeLength).map { it.smoothen() }
+            Random.nextMarkovPopulation(populationSize, chromosomeLength) // .map { it.smoothen() }
         } else {
             val ranking = if (_ranking.size > populationSize) _ranking.subList(0, populationSize) else _ranking
 
@@ -221,11 +225,9 @@ fun rouletteEvolver(
                 val p2 = ranking[cumulative.indexOfLast { it > r2 }]
                 // children
                 var (c1, c2) = lerpCrossover(p1.chromosome, p2.chromosome)
-                if (Random.nextDouble() <= mutationProbability) c1 = c1.uniformMutate()
-                if (Random.nextDouble() <= mutationProbability) c2 = c2.uniformMutate()
 
-                children += c1
-                children += c2
+                children += c1.uniformMutate(mutationProbability).smoothen()
+                children += c2.uniformMutate(mutationProbability).smoothen()
             }
 
             children

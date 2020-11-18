@@ -79,13 +79,13 @@ fun LanderController.score1(params: LanderParams): Double {
     return when {
         params.distanceFromFlat > surface.flatExtents -> // outside landing zone
             lerp(90.0, 0.0, params.distanceFromFlat / surface.surfaceLength)
-        params.distanceFromFlat > surface.flatExtents * 0.9 -> // in margin of landing zone
+        params.distanceFromFlat > surface.flatExtents * 0.5 -> // in margin of landing zone
             lerp(100.0, 90.0, params.distanceFromFlat / surface.flatExtents)
         else -> { // take velocity into consideration
             // speed on boundary is factor = 1.0, speed 0 is factor 0. Metric is infinity (box)
             val vFactor = max(abs(params.velocity.x)/20.0, abs(params.velocity.y)/40.0)
             100.0 + when {
-                vFactor > 1.0 -> lerp(90.0, 0.0, -1.0/vFactor + 1.0) // >100% terminal speed - 90--0
+                vFactor > 1.0 -> lerp(90.0, 0.0, vFactor/10.0 + 0.1) // >100% terminal speed - 90--0
                 vFactor > 0.95 -> lerp(100.0, 90.0, vFactor ) // 95%-100% of terminal speed - 100--90
                 else -> {
                     100.0 + (if(params.yaw == 0) 50.0 else 0.0) + 10*params.fuel/initialParams.fuel
