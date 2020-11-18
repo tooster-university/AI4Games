@@ -63,8 +63,10 @@ class LanderController(
     /** simulates flight, returns parameters on land contact (1 frame after collision) */
     fun LanderParams.simulateUntilCollision(actions: List<Action>): LanderParams {
         val actionIterator = actions.iterator()
+        lateinit var action: Action
         do {
-            val action = actionIterator.next() // unsafe use of iterator to catch errors for too short chromosomes
+            if(actionIterator.hasNext())
+                action = actionIterator.next() // unsafe use of iterator to catch errors for too short chromosomes
         } while (!stepAndCheckCollision(action))
         return this
     }
@@ -165,14 +167,14 @@ fun main(args: Array<String>) {
     val controller = LanderController(io, Surface(terrain), io.nextParams())
     controller.rollingHorizonSolver(
         rouletteEvolver(
-            populationSize = 200,
+            populationSize = 50,
             chromosomeLength = 300,
-            eliteSize = 40,
+            eliteSize = 30,
 //            mutationProbability = 0.2,
         ),
         LanderController::score1,
         visualizationInterval = 20,
-        evolverRounds = -95
+        evolverRounds = -995
     )
 //    controller.rollingHorizonSolver(muLambdaEvolver(200, 150), LanderController::penalty2)
 //    controller.rollingHorizonSolver(nonEvolver(), LanderController::penalty1)

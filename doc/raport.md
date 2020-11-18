@@ -1,6 +1,6 @@
 # Genetic Algorithm for [Mars Lander ep 2](https://www.codingame.com/ide/puzzle/mars-lander)
 
-by Tooster
+by Tooster (same nick on CodinGame)
 
 [repository with code](https://github.com/tooster-university/AI4Games/tree/master/src/main/kotlin/lander)
 
@@ -118,6 +118,7 @@ Every test case passes, but requires a little bit of tweaking to pass consistent
 Most frequent case why the  algorithm fails is due to timeout.
 
 ## Example cases
+
 ### Case: High Ground (offline - 1000ms per round, population size 400)
 
 Converges pretty quickly. Solution space is broad thanks to mutation policy. The best solution is found in the first two rounds.
@@ -128,6 +129,22 @@ Converges pretty quickly. Solution space is broad thanks to mutation policy. The
 
 ### Case: Deep Canyon (offline - 1000ms per round, population size 400)
 ![canyon](deep_canyon.png)
+
+### Case: Cave - Wrong side (offline - 1000ms per round, population size 50)
+
+Even Cave wrong side works! Maybe not as fast as I'd want it to, but still it's rather impressive. Just after 1400 populations. On Codin game that would be an equivalent of ~1 minute (1400 * 50 simulations)
+
+![cave wrong side](caveWrong.png)
+
+## Proof of case 2 + leaderboard
+
+![proof2](proof2.png)
+
+## Proof of case 3 on CodinGame
+
+![proof](proof.png)
+
+It turns out, that with such an implementation the population can be as small as 50 elements (!) to make the program work, even when elitism in on a level of 20 individuals per generation.
 
 ## Visualization
 
