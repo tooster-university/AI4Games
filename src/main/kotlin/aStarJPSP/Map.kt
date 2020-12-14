@@ -13,8 +13,8 @@ class Map constructor(val representation: String) {
     companion object {
         val deltas = EnumMap(
             mapOf(
-                N to (0 to -1), E to (1 to 0), S to (0 to 1), W to (-1 to 0),
-                NE to (1 to -1), SE to (1 to 1), SW to (-1 to 1), NW to (-1 to -1)
+                N to (-1 to 0), E to (0 to 1), S to (1 to 0), W to (0 to -1),
+                NE to (-1 to 1), SE to (1 to 1), SW to (1 to -1), NW to (-1 to -1)
             )
         )
     }
@@ -30,7 +30,7 @@ class Map constructor(val representation: String) {
             }
         }
 
-        // 0. find primary jump points
+        // 1. find primary jump points
         tiles.flatten().forEach { tile: Tile ->
             if (tile is EmptyTile) tile.primaryJumpPoints.addAll(Direction.values.filter { fromDir ->
 /*@FUCKOFF*/    tile.neighbor(fromDir.LEFT_BACK) is WallTile && tile.neighbor(fromDir.LEFT) is EmptyTile ||
@@ -38,50 +38,59 @@ class Map constructor(val representation: String) {
             })
         }
 
-        fun cardinalSweep(main: Direction) { // main is direction of sweep
-            val cross = if (main == N || main == S) E else S
-            var mainTile = tileAt(if (main == N) height - 1 else 0, if (main == W) width - 1 else 0)
+        fun cardinalSweep(main: Direction) { // main is direction of sweep (N is ^)
+            val crossDirection = if (main == N || main == S) E else S // direction of outer loop
+            var axisStartTile = tileAt(if (main == N) height - 1 else 0, if (main == W) width - 1 else 0)
+
             do { // major loop
-                var crossTile = mainTile
+                var axisTile = axisStartTile
 
                 var (count, jpSeen) = -1 to false
 
                 do { // minor loop
-
-                    if (crossTile is WallTile) {
+                    var tile = axisTile
+                    if (tile is WallTile) {
                         count = -1
                         jpSeen = false
-                        crossTile.distance[main.BACK] = 0
+                        tile.distance[main.BACK] = 0
+                        axisTile = axisTile.neighbor(main) // FIXME this is just pathetic
                         continue
                     }
-                    val tile = crossTile as DataTile
+                    tile = tile as DataTile
 
-                    tile.distance[main.BACK] = if (jpSeen) ++count else --count
+                    ++count;
+
+                    tile.distance[main.BACK] = if (jpSeen) +count else -count
                     if (tile is EmptyTile && tile.primaryJumpPoints.contains(main.BACK)) {
                         count = 0
                         jpSeen = true;
                     }
 
-                    crossTile = crossTile.neighbor(cross)
-                } while (crossTile !is BorderTile)
+                    axisTile = axisTile.neighbor(main)
+                } while (axisTile !is BorderTile)
 
-                mainTile = mainTile.neighbor(main)
-            } while (mainTile !is BorderTile)
+                axisStartTile = axisStartTile.neighbor(crossDirection)
+            } while (axisStartTile !is BorderTile)
         }
 
-        cardinalSweep(E)
-        cardinalSweep(W)
-        cardinalSweep(S)
-        cardinalSweep(N)
+        cardinalSweep(E) // 2. left-to-right sweep
+        cardinalSweep(W) // 3. right-to-left sweep
+        cardinalSweep(S) // 4. up-down sweep
+        cardinalSweep(N) // 5. down-up sweep
 
         fun diagonalSweep(main: Direction) {
-            val cross = if (main == N || main == S) E else S
-            var mainTile = tileAt(if (main == N) height - 1 else 0, if (main == W) width - 1 else 0)
+            val crossDirection = if (main == N || main == S) E else S // direction of outer loop
+            var axisStartTile = tileAt(if (main == N) height - 1 else 0, if (main == W) width - 1 else 0)
+
             do { // major loop
-                var crossTile = mainTile
+                var axisTile = axisStartTile
                 do { // minor loop
-                    if (crossTile !is EmptyTile) continue
-                    val tile = crossTile as EmptyTile
+                    val tile = axisTile
+
+                    if (tile !is EmptyTile) {
+                        axisTile = axisTile.neighbor(crossDirection) // FIXME this is terrible
+                        continue
+                    }
 
                     val B = tile.neighbor(main.BACK)
                     val LB = tile.neighbor(main.LEFT_BACK)
@@ -109,17 +118,15 @@ class Map constructor(val representation: String) {
                         tile.distance[main.RIGHT_BACK] = jmpDist + if (jmpDist > 0) 1 else -1
                     }
 
-                    crossTile = crossTile.neighbor(cross)
-                } while (crossTile !is BorderTile)
+                    axisTile = axisTile.neighbor(crossDirection) // layer by layer
+                } while (axisTile !is BorderTile)
 
-                mainTile = mainTile.neighbor(main)
-            } while (mainTile !is BorderTile)
+                axisStartTile = axisStartTile.neighbor(main)
+            } while (axisStartTile !is BorderTile)
         }
 
-        cardinalSweep(E)
-        cardinalSweep(W)
-        cardinalSweep(S)
-        cardinalSweep(N)
+        diagonalSweep(S) // 6. down-up sweep
+        diagonalSweep(N) // 7. up-down sweep
     }
 
     fun tileAt(row: Int, col: Int): Tile =

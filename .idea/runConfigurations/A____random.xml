@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="MainKt - optimal path maze" type="JetRunConfigurationType">
+  <configuration default="false" name="A* - random" type="JetRunConfigurationType" folderName="A*">
     <module name="AI4Games.main" />
     <option name="VM_PARAMETERS" value="" />
     <option name="PROGRAM_PARAMETERS" value="" />
