@@ -1,12 +1,12 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Lander - cave correct" type="JetRunConfigurationType">
+  <configuration default="false" name="MainKt - no walls" type="JetRunConfigurationType">
     <module name="AI4Games.main" />
-    <option name="VM_PARAMETERS" value="-ea" />
-    <option name="PROGRAM_PARAMETERS" value="CAVE_CORRECT" />
+    <option name="VM_PARAMETERS" value="" />
+    <option name="PROGRAM_PARAMETERS" value="" />
     <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
     <option name="ALTERNATIVE_JRE_PATH" />
     <option name="PASS_PARENT_ENVS" value="true" />
-    <option name="MAIN_CLASS_NAME" value="lander.LanderControllerKt" />
+    <option name="MAIN_CLASS_NAME" value="aStarJPSP.MainKt" />
     <option name="WORKING_DIRECTORY" value="" />
     <method v="2">
       <option name="Make" enabled="true" />
