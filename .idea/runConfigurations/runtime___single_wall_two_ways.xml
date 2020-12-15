@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="runtime- example from article" type="JetRunConfigurationType" folderName="A* runtime">
+  <configuration default="false" name="runtime - single wall two ways" type="JetRunConfigurationType" folderName="A* runtime">
     <module name="AI4Games.main" />
     <option name="VM_PARAMETERS" value="" />
     <option name="PROGRAM_PARAMETERS" value="" />

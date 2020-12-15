@@ -20,7 +20,7 @@ class Map {
     }
 
     constructor(representation: String) {
-        val lines = representation.split('\n');
+        val lines = representation.split('\n')
         height = lines.size
         width = lines[0].length
         borders = EnumMap(mapOf(N to 0, E to width - 1, S to height - 1, W to 0))
@@ -34,7 +34,7 @@ class Map {
         tiles.flatten().forEach { tile: Tile ->
             if (tile is EmptyTile) tile.primaryJumpPoints.addAll(Direction.values.filter { fromDir ->
 /*@FUCKOFF*/    tile.neighbor(fromDir.LEFT_BACK) is WallTile && tile.neighbor(fromDir.LEFT) is EmptyTile ||
-/*@FUCKON*/     tile.neighbor(fromDir.RIGHT_BACK) is WallTile && tile.neighbor(fromDir.RIGHT) is EmptyTile
+/*@FUCKON */    tile.neighbor(fromDir.RIGHT_BACK) is WallTile && tile.neighbor(fromDir.RIGHT) is EmptyTile
             })
         }
 
@@ -58,12 +58,12 @@ class Map {
                     }
                     tile = tile as DataTile
 
-                    ++count;
+                    ++count
 
                     tile.distance[main.BACK] = if (jpSeen) +count else -count
                     if (tile is EmptyTile && tile.primaryJumpPoints.contains(main.BACK)) {
                         count = 0
-                        jpSeen = true;
+                        jpSeen = true
                     }
 
                     axisTile = axisTile.neighbor(main)
@@ -139,7 +139,7 @@ class Map {
         precomputed.forEach {
             val (col, row) = it.subList(0, 2)
             val tile = EmptyTile(col=col, row=row)
-            tile.distance.values.addAll(it.subList(2, it.size)) // this should add the values in correct order
+            it.subList(2, it.size).forEachIndexed { ix, v -> tile.distance.put(Direction.values[ix], v) }
             tiles[row][col] = tile
         }
     }
@@ -147,9 +147,9 @@ class Map {
     fun tileAt(row: Int, col: Int): Tile =
         tiles.getOrElse(row) { emptyArray() }.getOrElse(col) { BorderTile(row, col) }
 
-    fun Tile.neighbor(dir: Direction): Tile {
+    fun Tile.neighbor(dir: Direction, distance: Int = 1): Tile {
         val (dr, dc) = deltas[dir]!!
-        return tileAt(row + dr, col + dc)
+        return tileAt(row + dr * distance, col + dc * distance)
     }
 
     fun EmptyTile.canMoveTowards(dir: Direction): Boolean {
@@ -182,5 +182,7 @@ class Map {
         class EmptyTile(row: Int, col: Int) : DataTile(row, col) {
             val primaryJumpPoints: EnumSet<Direction> = EnumSet.noneOf(Direction::class.java)
         }
+
+        infix fun sameAs(other: Tile) = (this.col == other.col) && (this.row == other.row)
     }
 }
