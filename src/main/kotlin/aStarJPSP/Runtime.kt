@@ -118,12 +118,11 @@ fun Map.pathFind(sourceTile: Tile.EmptyTile, goalTile: Tile.EmptyTile) {
 
             // 3. regular A*
             if (nextTile != null) {
-
-                // CHECKME closed list doesn't work work on CodinGame yet
+                
                 val found = openList.find { it.tile sameAs nextTile }
-                if (/*!closedSet.contains(nextTile) &&*/ found == null){
+                if (!closedSet.contains(nextTile) && found == null){
                     openList.add(Node(nextTile, node, dir, givenCost, givenCost + (nextTile octileDistance goalTile)))
-                } else if (/*found != null &&*/ givenCost < found.givenCost) {
+                } else if (found != null && givenCost < found.givenCost) {
                     openList.removeIf { it.tile sameAs nextTile }
                     openList.add(Node(nextTile, node, dir, givenCost, givenCost + (nextTile octileDistance goalTile)))
                 }
