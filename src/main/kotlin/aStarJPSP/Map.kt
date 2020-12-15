@@ -4,7 +4,7 @@ import aStarJPSP.Map.Tile.*
 import aStarJPSP.Direction.*
 import java.util.*
 
-class Map constructor(val representation: String) {
+class Map {
     val width: Int
     val height: Int
     val borders: EnumMap<Direction, Int> // offset of borders, so N border is top etc.
@@ -19,7 +19,7 @@ class Map constructor(val representation: String) {
         )
     }
 
-    init {
+    constructor(representation: String) {
         val lines = representation.split('\n');
         height = lines.size
         width = lines[0].length
@@ -127,6 +127,21 @@ class Map constructor(val representation: String) {
 
         diagonalSweep(S) // 6. down-up sweep
         diagonalSweep(N) // 7. up-down sweep
+    }
+
+    constructor(width: Int, height: Int, precomputed: List<List<Int>>) {
+        this.height = height
+        this.width = width
+        borders = EnumMap(mapOf(N to 0, E to width - 1, S to height - 1, W to 0))
+        tiles = Array(height) { row -> Array(width) { col -> WallTile(row, col) } }
+
+        // 1. initialize from precomputed data
+        precomputed.forEach {
+            val (col, row) = it.subList(0, 2)
+            val tile = EmptyTile(col=col, row=row)
+            tile.distance.values.addAll(it.subList(2, it.size)) // this should add the values in correct order
+            tiles[row][col] = tile
+        }
     }
 
     fun tileAt(row: Int, col: Int): Tile =
